@@ -255,6 +255,8 @@ require('lazy').setup({
   --
   -- Use `opts = {}` to automatically pass options to a plugin's `setup()` function, forcing the plugin to be loaded.
   --
+  -- For c# decompilation.
+  { 'Hoffs/omnisharp-extended-lsp.nvim' },
 
   -- Alternatively, use `config = function() ... end` for full control over the configuration.
   -- If you prefer to call `setup` explicitly, use:
@@ -584,6 +586,35 @@ require('lazy').setup({
               return client.supports_method(method, { bufnr = bufnr })
             end
           end
+          -- Fuzzy find all the symbols in your current document.
+          --  Symbols are things like variables, functions, types, etc.
+          map('<leader>ds', require('telescope.builtin').lsp_document_symbols, '[D]ocument [S]ymbols')
+
+          -- Fuzzy find all the symbols in your current workspace.
+          --  Similar to document symbols, except searches over your entire project.
+          map('<leader>ws', require('telescope.builtin').lsp_dynamic_workspace_symbols, '[W]orkspace [S]ymbols')
+
+          -- Rename the variable under your cursor.
+          --  Most Language Servers support renaming across files, etc.
+          map('<leader>rn', vim.lsp.buf.rename, '[R]e[n]ame')
+
+          -- Execute a code action, usually your cursor needs to be on top of an error
+          -- or a suggestion from your LSP for this to activate.
+          map('<leader>ca', vim.lsp.buf.code_action, '[C]ode [A]ction', { 'n', 'x' })
+
+          -- Copy LLDB breakpoint command (current file + line) to system clipboard
+          map('<leader>cb', function()
+            local file = vim.fn.expand '%:t'
+            local line = vim.fn.line '.'
+            local cmd = 'breakpoint set --file ' .. file .. ' --line ' .. line
+            vim.fn.setreg('+', cmd)
+            vim.notify('Copied to clipboard:\n' .. cmd)
+          end, '[C]ode [B]reakpoint to clipboard')
+
+          -- WARN: This is not Goto Definition, this is Goto Declaration.
+          --  For example, in C this would take you to the header.
+          map('gd', vim.lsp.buf.declaration, '[G]oto [d]eclaration')
+          map('gD', vim.lsp.buf.implementation, '[G]oto [D]efinition')
 
           -- The following two autocommands are used to highlight references of the
           -- word under your cursor when your cursor rests there for a little while.
@@ -671,10 +702,17 @@ require('lazy').setup({
       --  - settings (table): Override the default settings passed when initializing the server.
       --        For example, to see the options for `lua_ls`, you could go to: https://luals.github.io/wiki/settings/
       local servers = {
-        -- clangd = {},
+        clangd = {},
+
+        omnisharp = {
+          filetypes = { 'cs' },
+          root_dir = require('lspconfig').util.root_pattern('*.csproj', '*.sln'),
+          capabilities = capabilities,
+        },
+
         -- gopls = {},
         -- pyright = {},
-        -- rust_analyzer = {},
+        rust_analyzer = {},
         -- ... etc. See `:help lspconfig-all` for a list of all the pre-configured LSPs
         --
         -- Some languages (like typescript) have entire language plugins that can be useful:
@@ -725,10 +763,15 @@ require('lazy').setup({
         handlers = {
           function(server_name)
             local server = servers[server_name] or {}
-            -- This handles overriding only values explicitly passed
-            -- by the server configuration above. Useful when disabling
-            -- certain features of an LSP (for example, turning off formatting for ts_ls)
+            -- Extend capabilities for the server
             server.capabilities = vim.tbl_deep_extend('force', {}, capabilities, server.capabilities or {})
+
+            -- Check if the server is OmniSharp and apply the custom handler
+            if server_name == 'omnisharp' then
+              server.handlers = { ['textDocument/definition'] = require('omnisharp_extended').handler }
+            end
+
+            -- Setup the LSP server
             require('lspconfig')[server_name].setup(server)
           end,
         },
@@ -768,6 +811,8 @@ require('lazy').setup({
       end,
       formatters_by_ft = {
         lua = { 'stylua' },
+        -- c = { 'clang-format' },
+        -- cpp = { 'clang-format' },
         -- Conform can also run multiple formatters sequentially
         -- python = { "isort", "black" },
         --
@@ -776,7 +821,6 @@ require('lazy').setup({
       },
     },
   },
-
   { -- Autocompletion
     'saghen/blink.cmp',
     event = 'VimEnter',
@@ -879,22 +923,15 @@ require('lazy').setup({
   { -- You can easily change to a different colorscheme.
     -- Change the name of the colorscheme plugin below, and then
     -- change the command in the config to whatever the name of that colorscheme is.
-    --
-    -- If you want to see what colorschemes are already installed, you can use `:Telescope colorscheme`.
-    'folke/tokyonight.nvim',
+    'neanias/everforest-nvim',
     priority = 1000, -- Make sure to load this before all the other start plugins.
+    lazy = false, -- Ensure it loads on startup
     config = function()
-      ---@diagnostic disable-next-line: missing-fields
-      require('tokyonight').setup {
-        styles = {
-          comments = { italic = false }, -- Disable italics in comments
-        },
+      require('everforest').setup {
+        background = 'soft', -- can be "soft", "medium", or "hard"
+        italics = true,
       }
-
-      -- Load the colorscheme here.
-      -- Like many other themes, this one has different styles, and you could load
-      -- any other, such as 'tokyonight-storm', 'tokyonight-moon', or 'tokyonight-day'.
-      vim.cmd.colorscheme 'tokyonight-night'
+      vim.cmd [[colorscheme everforest]]
     end,
   },
 
